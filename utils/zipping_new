@@ -1,0 +1,48 @@
+#!/bin/bash
+set -e
+export LC_ALL=C.UTF-8
+
+# Directory containing the patient folders
+patients_dir="."
+
+# Name for the final zip archive.
+zip_archive="patients_dcm.zip"
+
+temp_dir=$(mktemp -d -p "$patients_dir" tmp_archive.XXXX)
+echo "Using temporary directory: $temp_dir"
+
+for patient_id_folder in "$patients_dir"/*; do
+    if [[ -d "$patient_id_folder" ]]; then
+        echo "Processing patient ID folder: $(basename "$patient_id_folder")"
+
+        find "$patient_id_folder" -maxdepth 3 -type d -name "patient*" | while IFS= read -r patient_n_folder; do
+            patient_n_name=$(basename "$patient_n_folder")
+            echo "  Found patient folder: $patient_n_name"
+
+            # Locate the "DCM" folder inside the patientN.
+            dcm_folder=$(find "$patient_n_folder" -maxdepth 1 -type d -name "DCM" -print -quit)
+
+            if [[ -n "$dcm_folder" ]]; then
+                echo "    Found DCM folder: $dcm_folder"
+
+                target_patient_dir="$temp_dir/$patient_n_name"
+                mkdir -p "$target_patient_dir"
+
+                # Recreate the "DCM" folder using hard links.
+                cp -al "$dcm_folder" "$target_patient_dir/"
+            else
+                echo "    DCM folder not found in $patient_n_name"
+            fi
+        done
+    fi
+done
+
+echo "Creating zip archive: $zip_archive"
+
+pushd "$temp_dir" > /dev/null
+zip -r "../$zip_archive" ./*
+popd > /dev/null
+
+rm -rf "$temp_dir"
+
+echo "Done. The archive '$zip_archive' has been created."

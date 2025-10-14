@@ -1,0 +1,44 @@
+#!/bin/bash
+
+export LC_ALL=C.UTF-8
+
+patients_dir="."
+patient_counter=1
+
+process_dcm_folder() {
+    local dcm_folder="$1"
+    local patient_id="$2"
+
+    echo "DCM directory found: $(basename "$(dirname "$dcm_folder")")"
+    
+    dcmodify --erase-private -imt \
+	-i "PatientName=Anonymous" \
+	-i "PatientBirthDate=" \
+	-i "PatientSex="  \
+	-i "PatientID=$patient_id" \
+	-e "InstitutionName" \
+	-e "InstitutionAddress" \
+	-e "ReferringPhysicianName" "$dcm_folder"/*
+
+    local bak_folder="$(dirname "$dcm_folder")/DCM_bak"
+    mkdir -p "$bak_folder"
+    mv "$dcm_folder"/*.bak "$bak_folder/" 2>/dev/null # 2>/dev/null чтобы подавить ошибки, если нет .bak файлов
+}
+
+for patient_folder in "$patients_dir"/*; do
+    if [[ -d "$patient_folder" ]]; then
+        echo "Processing: $(basename "$patient_folder")"
+
+        dcm_folder=$(find "$patient_folder" -type d -name "DCM" -print -quit)
+
+        if [[ -n "$dcm_folder" ]]; then
+            process_dcm_folder "$dcm_folder"
+        else
+            echo "DCM not found for: $(basename "$patient_folder")"
+        fi
+	
+	((patient_counter++))
+    fi
+done
+
+echo "Complete."

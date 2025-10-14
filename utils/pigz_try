@@ -1,0 +1,54 @@
+#!/bin/bash
+set -e
+export LC_ALL=C.UTF-8
+
+# Directory containing the patient folders
+patients_dir="."
+
+# Name for the final tar.gz archive.
+tar_gz_archive="patients_dcm.tar.gz"
+
+# Temp directory
+temp_dir=$(mktemp -d -p "$patients_dir" tmp_archive.XXXX)
+echo "Using temporary directory: $temp_dir"
+
+patient_counter=1
+
+# Loop over each top-level patient folder in patients_dir.
+for patient_id_folder in "$patients_dir"/*; do
+    if [[ -d "$patient_id_folder" ]]; then
+        echo "Processing patient ID folder: $(basename "$patient_id_folder")"
+
+        # Locate the "DCM" folder within the current patient folder.
+        dcm_folder=$(find "$patient_id_folder" -maxdepth 3 -type d -name "DCM" -print -quit)
+
+        if [[ -n "$dcm_folder" ]]; then
+            echo "    Found DCM folder: $dcm_folder"
+
+            target_patient_dir="$temp_dir/patient${patient_counter}"
+            mkdir -p "$target_patient_dir"
+
+            cp -al "$dcm_folder" "$target_patient_dir/DCM"
+
+            ((patient_counter++))
+        else
+            echo "    DCM folder not found in $(basename "$patient_id_folder")"
+        fi
+    fi
+done
+
+echo "Creating tar.gz archive: $tar_gz_archive"
+
+pushd "$temp_dir" > /dev/null
+if command -v pigz >/dev/null 2>&1; then
+    echo "Using pigz for parallel compression."
+    tar -cf - . | pigz -c > "../$tar_gz_archive"
+else
+    echo "pigz not found, using gzip for compression."
+    tar -czf "../$tar_gz_archive" .
+fi
+popd > /dev/null
+
+rm -rf "$temp_dir"
+
+echo "Done. The archive '$tar_gz_archive' has been created."
